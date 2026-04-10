@@ -7,6 +7,7 @@ import { transcribeAudio } from "../whatsapp/transcribe";
 import { handleConfirmationReply } from "../reminders/scheduler";
 import { isAutomationEnabled } from "../automation";
 import { persistMessage } from "../db/conversations";
+import { isDemoActive, detectBotIntent, callDemoAPI } from "../bot/demoBot";
 
 export const webhookRouter = Router();
 
@@ -136,6 +137,24 @@ async function processAndReply(
       await persistMessage(waId, "user", text);
       console.log(`[webhook] Automatización OFF para ${waId} — mensaje guardado sin responder`);
       return;
+    }
+
+    // ── Interceptar demo de bot (Devapli) ─────────────────────────────────
+    try {
+      const demoAlreadyActive = isDemoActive(waId);
+      const shouldDemo = demoAlreadyActive || (await detectBotIntent(text));
+      if (shouldDemo) {
+        const { reply } = await callDemoAPI({
+          phone: waId,
+          message: text,
+          botPhoneNumberId: WHATSAPP.phoneNumberId,
+          contactName: displayName,
+        });
+        await sendWithHumanDelay(waId, reply);
+        return;
+      }
+    } catch (error) {
+      console.error(`[webhook] Demo bot error para ${waId} — continuando con flujo normal:`, error);
     }
 
     // ── Interceptar respuestas de confirmación de recordatorio ────────────
