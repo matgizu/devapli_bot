@@ -1,0 +1,65 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Lead {
+  id               String    @id @default(cuid())
+  waId             String    @unique
+  displayName      String?
+  name             String?
+  phone            String
+  email            String?
+  businessName     String?
+  businessType     String?
+  monthlyBudget    String?   // Texto literal que dijo el cliente
+  budgetAmount     Float?    // Número en COP parseado
+  businessAge      String?   // Texto literal que dijo el cliente
+  businessAgeMonths Int?     // Meses parseados
+  qualified        Boolean?  // null = aún no determinado
+  disqualified     Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  meetings         Meeting[]
+  conversations    Conversation[]
+}
+
+model Meeting {
+  id              String   @id @default(cuid())
+  waId            String
+  lead            Lead     @relation(fields: [waId], references: [waId])
+  scheduledAt     DateTime
+  slotId          String?  // ID del slot en Cal.com u otro proveedor
+  calendarEventId String?  // ID del evento confirmado en el calendario
+  attendeeName    String?
+  attendeeEmail   String?
+  attendeePhone   String?
+  status          String   @default("SCHEDULED") // SCHEDULED | CANCELLED | COMPLETED
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Conversation {
+  id        String    @id @default(cuid())
+  waId      String
+  lead      Lead?     @relation(fields: [waId], references: [waId])
+  messages  Message[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([waId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  role           String       // "user" | "assistant"
+  content        String       @db.Text
+  createdAt      DateTime     @default(now())
+}

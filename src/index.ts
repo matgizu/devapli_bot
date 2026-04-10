@@ -1,0 +1,40 @@
+import "dotenv/config";
+import express from "express";
+import { webhookRouter } from "./webhooks/whatsapp";
+import { apiRouter } from "./api/conversations";
+
+const app = express();
+const PORT = parseInt(process.env.PORT || "3000", 10);
+
+// ─── Middleware ────────────────────────────────────────────────────────────────
+// Raw body para verificación HMAC
+app.use(
+  express.json({
+    verify: (req, _res, buf) => {
+      (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
+    },
+  })
+);
+
+// ─── Rutas ────────────────────────────────────────────────────────────────────
+app.get("/health", (_req, res) => {
+  res.json({ ok: true, ts: new Date().toISOString() });
+});
+
+app.use("/webhook/whatsapp", webhookRouter);
+app.use("/api", apiRouter);
+
+// ─── Iniciar servidor ─────────────────────────────────────────────────────────
+app.listen(PORT, () => {
+  console.log(`
+  ╔══════════════════════════════════════════════════╗
+  ║       BOT AGENCIA — Servidor iniciado            ║
+  ║   Puerto: ${PORT}                                     ║
+  ║   Webhook: /webhook/whatsapp                     ║
+  ║   API:     /api                                  ║
+  ║   Health:  /health                               ║
+  ╚══════════════════════════════════════════════════╝
+  `);
+});
+
+export default app;
