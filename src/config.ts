@@ -63,10 +63,16 @@ export const CLAUDE = {
 // ─── Comportamiento humano ────────────────────────────────────────────────────
 export const HUMAN_BEHAVIOR = {
   debounceMs: 1200,
-  typingBaseMs: 600,
-  typingPerWordMs: 40,
-  typingMaxMs: 4500,
-  firstMessageDelayMs: 10_000,  // 10s en el primer mensaje para parecer humano
+  // Thinking delay: simula que está leyendo y escribiendo (proporcional al largo de la respuesta)
+  // Fórmula objetivo: 5 palabras → ~10s | 35 palabras → ~1 min
+  thinkingBaseMs: 2_000,       // base 2s
+  thinkingPerWordMs: 1_600,    // 1.6s por palabra → 35 palabras ≈ 58s total
+  thinkingMaxMs: 90_000,       // tope 90s
+  // Typing delay: tiempo que muestra "escribiendo..." antes de enviar
+  typingBaseMs: 1_500,
+  typingPerWordMs: 60,
+  typingMaxMs: 8_000,
+  firstMessageDelayMs: 10_000,  // 10s extra en el primer mensaje
 };
 
 // ─── Remarketing ─────────────────────────────────────────────────────────────

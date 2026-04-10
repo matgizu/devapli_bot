@@ -3,6 +3,12 @@ import { WHATSAPP, HUMAN_BEHAVIOR, PROOF_IMAGES } from "../config";
 
 const BASE_URL = `https://graph.facebook.com/v21.0/${WHATSAPP.phoneNumberId}`;
 
+function thinkingDelay(text: string): number {
+  const words = text.split(/\s+/).length;
+  const delay = HUMAN_BEHAVIOR.thinkingBaseMs + words * HUMAN_BEHAVIOR.thinkingPerWordMs;
+  return Math.min(delay, HUMAN_BEHAVIOR.thinkingMaxMs);
+}
+
 function typingDelay(text: string): number {
   const words = text.split(/\s+/).length;
   const delay = HUMAN_BEHAVIOR.typingBaseMs + words * HUMAN_BEHAVIOR.typingPerWordMs;
@@ -82,6 +88,10 @@ export async function sendWithHumanDelay(to: string, text: string): Promise<void
 
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i];
+    // Solo en la primera parte: delay de "lectura + pensamiento" antes de empezar a escribir
+    if (i === 0) {
+      await sleep(thinkingDelay(part));
+    }
     await sleep(typingDelay(part));
     await sendText(to, part);
   }

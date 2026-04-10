@@ -38,6 +38,24 @@ function formatSlotsForPrompt(slots: CalendarSlot[]): string {
   );
 }
 
+function formatBookedSlot(isoTime: string): string {
+  const date = new Date(isoTime);
+  const fecha = date.toLocaleDateString("es-CO", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "America/Bogota",
+  });
+  const hora = date.toLocaleTimeString("es-CO", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "America/Bogota",
+  });
+  return `${fecha} a las ${hora} (hora Colombia)`;
+}
+
 function nowInColombia(): string {
   const now = new Date();
   const fecha = now.toLocaleDateString("es-CO", {
@@ -205,6 +223,7 @@ El orden de pasos es ESTRICTO — no lo alterés:
   b) Objetivo principal del negocio en los próximos 3 meses
   c) Presupuesto mensual exacto disponible para pauta
 - Cerrá con entusiasmo y profesionalismo
+- **NUNCA digas "nos vemos en 30 minutos", "hasta ahora", ni nada que implique que la reunión es inminente.** Siempre referenciá la reunión por su fecha y hora exacta (ej: "nos vemos el martes 14 a las 10am").
 
 ---
 
