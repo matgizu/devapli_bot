@@ -16,8 +16,9 @@ export const AGENCY = {
 export const QUALIFICATION = {
   // Inversión mensual mínima en pauta (COP)
   MIN_MONTHLY_BUDGET_COP: 1_500_000,
-  // Zona gris: Claude evalúa con más criterio
-  BORDERLINE_BUDGET_COP: 800_000,
+  // Zona gris: entre este valor y el mínimo, Claude evalúa con criterio
+  // Por debajo de este valor: descalificar siempre
+  BORDERLINE_BUDGET_COP: 1_000_000,
   // Antigüedad mínima del negocio en meses
   MIN_BUSINESS_AGE_MONTHS: 6,
 };
