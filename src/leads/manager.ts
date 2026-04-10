@@ -78,6 +78,6 @@ export async function getAllLeads() {
 export async function getLeadByWaId(waId: string) {
   return prisma.lead.findUnique({
     where: { waId },
-    include: { meetings: true, conversations: { include: { messages: true } } },
+    include: { meetings: true },
   });
 }

@@ -53,7 +53,6 @@ export async function getAllConversations() {
     orderBy: { updatedAt: "desc" },
     include: {
       messages: { orderBy: { createdAt: "desc" }, take: 1 },
-      lead: true,
     },
   });
 }

@@ -8,25 +8,24 @@ datasource db {
 }
 
 model Lead {
-  id               String    @id @default(cuid())
-  waId             String    @unique
-  displayName      String?
-  name             String?
-  phone            String
-  email            String?
-  businessName     String?
-  businessType     String?
-  monthlyBudget    String?   // Texto literal que dijo el cliente
-  budgetAmount     Float?    // Número en COP parseado
-  businessAge      String?   // Texto literal que dijo el cliente
-  businessAgeMonths Int?     // Meses parseados
-  qualified        Boolean?  // null = aún no determinado
-  disqualified     Boolean   @default(false)
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id                String    @id @default(cuid())
+  waId              String    @unique
+  displayName       String?
+  name              String?
+  phone             String
+  email             String?
+  businessName      String?
+  businessType      String?
+  monthlyBudget     String?
+  budgetAmount      Float?
+  businessAge       String?
+  businessAgeMonths Int?
+  qualified         Boolean?
+  disqualified      Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  meetings         Meeting[]
-  conversations    Conversation[]
+  meetings          Meeting[]
 }
 
 model Meeting {
@@ -34,20 +33,21 @@ model Meeting {
   waId            String
   lead            Lead     @relation(fields: [waId], references: [waId])
   scheduledAt     DateTime
-  slotId          String?  // ID del slot en Cal.com u otro proveedor
-  calendarEventId String?  // ID del evento confirmado en el calendario
+  slotId          String?
+  calendarEventId String?
   attendeeName    String?
   attendeeEmail   String?
   attendeePhone   String?
-  status          String   @default("SCHEDULED") // SCHEDULED | CANCELLED | COMPLETED
+  status          String   @default("SCHEDULED")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
 
+// Sin FK a Lead — la conversación se crea desde el primer mensaje,
+// antes de que el Lead exista en la DB
 model Conversation {
   id        String    @id @default(cuid())
   waId      String
-  lead      Lead?     @relation(fields: [waId], references: [waId])
   messages  Message[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -59,7 +59,7 @@ model Message {
   id             String       @id @default(cuid())
   conversationId String
   conversation   Conversation @relation(fields: [conversationId], references: [id])
-  role           String       // "user" | "assistant"
+  role           String
   content        String       @db.Text
   createdAt      DateTime     @default(now())
 }
