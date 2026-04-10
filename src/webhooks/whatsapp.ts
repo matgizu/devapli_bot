@@ -142,7 +142,7 @@ async function processAndReply(
     // ── Interceptar demo de bot (Devapli) ─────────────────────────────────
     try {
       const demoAlreadyActive = isDemoActive(waId);
-      const shouldDemo = demoAlreadyActive || (await detectBotIntent(text));
+      const shouldDemo = demoAlreadyActive || detectBotIntent(text);
       if (shouldDemo) {
         const { reply } = await callDemoAPI({
           phone: waId,

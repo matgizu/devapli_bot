@@ -1,59 +1,26 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { CLAUDE } from "../config";
 
-const client = new Anthropic({ apiKey: CLAUDE.apiKey });
-
-// Keywords específicas de intención de COMPRAR/CONTRATAR un bot — no genéricas
+// Solo frases donde el usuario pide explícitamente cotizar o contratar un bot
 const DEMO_KEYWORDS = [
+  "cotizar un bot",
+  "cotizar el bot",
+  "quiero cotizar",
   "quiero un bot",
   "necesito un bot",
-  "bot para mi negocio",
   "quiero el bot",
-  "me interesa el bot",
-  "precio del bot",
-  "comprar el bot",
   "contratar el bot",
+  "comprar el bot",
   "cuánto cuesta el bot",
-  "whatsapp bot",
-  "chatbot para",
-  "ia para whatsapp",
+  "precio del bot",
   "bot de whatsapp",
-  "bot para responder",
-  "automatizar mis mensajes",
-  "automatizar whatsapp",
-  "respuestas automáticas para",
+  "bot para whatsapp",
 ];
 
 // Estado en memoria — si el servidor reinicia, Devapli recupera el estado por su cuenta
 const activeDemos = new Map<string, boolean>();
 
-export async function detectBotIntent(message: string): Promise<boolean> {
+export function detectBotIntent(message: string): boolean {
   const lower = message.toLowerCase();
-  if (DEMO_KEYWORDS.some((kw) => lower.includes(kw))) return true;
-
-  try {
-    const response = await client.messages.create({
-      model: CLAUDE.model,
-      max_tokens: 10,
-      messages: [
-        {
-          role: "user",
-          content:
-            `¿Este mensaje indica que la persona quiere COMPRAR o CONTRATAR un bot de WhatsApp o chatbot para automatizar mensajes de su negocio? ` +
-            `NO respondas SI si solo menciona inteligencia artificial, marketing digital, automatización de anuncios u otros servicios de agencia. ` +
-            `Solo SI si claramente quiere un bot/chatbot de WhatsApp. Responde solo: SI o NO. Mensaje: ${message}`,
-        },
-      ],
-    });
-    const text = response.content
-      .filter((c) => c.type === "text")
-      .map((c) => (c as Anthropic.TextBlock).text)
-      .join("")
-      .trim();
-    return text.startsWith("SI");
-  } catch {
-    return false;
-  }
+  return DEMO_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
 export function isDemoActive(phone: string): boolean {
