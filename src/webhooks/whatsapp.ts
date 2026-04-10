@@ -144,12 +144,14 @@ async function processAndReply(
       const demoAlreadyActive = isDemoActive(waId);
       const shouldDemo = demoAlreadyActive || detectBotIntent(text);
       if (shouldDemo) {
+        await persistMessage(waId, "user", text);
         const { reply } = await callDemoAPI({
           phone: waId,
           message: text,
           botPhoneNumberId: WHATSAPP.phoneNumberId,
           contactName: displayName,
         });
+        await persistMessage(waId, "assistant", reply);
         await sendWithHumanDelay(waId, reply);
         return;
       }
