@@ -141,15 +141,29 @@ async function processAndReply(
 function verifySignature(req: Request, res: Response, next: () => void): void {
   const signature = req.headers["x-hub-signature-256"] as string;
 
-  if (!signature || !WHATSAPP.appSecret) {
-    console.warn("[webhook] Sin firma o sin app secret configurado");
+  if (!WHATSAPP.appSecret) {
+    console.warn("[webhook] META_APP_SECRET no configurado — saltando verificación");
     next();
+    return;
+  }
+
+  if (!signature) {
+    console.warn("[webhook] ❌ Sin cabecera x-hub-signature-256");
+    res.sendStatus(403);
+    return;
+  }
+
+  // Meta firma el body RAW, no el JSON re-serializado
+  const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
+  if (!rawBody) {
+    console.warn("[webhook] ❌ rawBody no disponible");
+    res.sendStatus(403);
     return;
   }
 
   const expected = "sha256=" + crypto
     .createHmac("sha256", WHATSAPP.appSecret)
-    .update(JSON.stringify(req.body))
+    .update(rawBody)
     .digest("hex");
 
   if (signature !== expected) {
