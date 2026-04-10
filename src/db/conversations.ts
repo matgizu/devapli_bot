@@ -1,6 +1,4 @@
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "./prisma";
 
 // Cache en memoria para evitar buscar el conversationId en cada mensaje
 const convIdCache = new Map<string, string>();

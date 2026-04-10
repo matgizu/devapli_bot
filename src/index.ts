@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import { webhookRouter } from "./webhooks/whatsapp";
 import { apiRouter } from "./api/conversations";
+import { startReminderScheduler } from "./reminders/scheduler";
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "3000", 10);
@@ -25,6 +26,8 @@ app.use("/webhook/whatsapp", webhookRouter);
 app.use("/api", apiRouter);
 
 // ─── Iniciar servidor ─────────────────────────────────────────────────────────
+startReminderScheduler();
+
 app.listen(PORT, () => {
   console.log(`
   ╔══════════════════════════════════════════════════╗

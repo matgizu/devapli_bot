@@ -1,7 +1,6 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../db/prisma";
 import { LeadInfo } from "../bot/session";
-
-const prisma = new PrismaClient();
+import { CALENDAR } from "../config";
 
 export async function upsertLead(waId: string, displayName: string, leadInfo: LeadInfo): Promise<void> {
   try {
@@ -46,26 +45,50 @@ export async function createMeeting(params: {
   scheduledAt: Date;
   slotId?: string;
   calendarEventId?: string;
+  meetingUrl?: string;
   attendeeName?: string;
   attendeeEmail?: string;
   attendeePhone?: string;
-}): Promise<void> {
+}): Promise<string | null> {
   try {
-    await prisma.meeting.create({
+    const endsAt = new Date(
+      params.scheduledAt.getTime() + CALENDAR.meetingDurationMin * 60 * 1000
+    );
+    const meeting = await prisma.meeting.create({
       data: {
         waId: params.waId,
         scheduledAt: params.scheduledAt,
-        slotId: params.slotId,
-        calendarEventId: params.calendarEventId,
+        endsAt,
+        meetingUrl: params.meetingUrl,
         attendeeName: params.attendeeName,
         attendeeEmail: params.attendeeEmail,
         attendeePhone: params.attendeePhone,
         status: "SCHEDULED",
       },
     });
+    return meeting.id;
   } catch (error) {
     console.error("[leads] Error creando meeting:", error);
+    return null;
   }
+}
+
+export async function getMeetingByWaId(waId: string) {
+  return prisma.meeting.findFirst({
+    where: { waId, status: { in: ["SCHEDULED", "CONFIRMED"] } },
+    orderBy: { scheduledAt: "asc" },
+  });
+}
+
+export async function updateMeetingStatus(
+  id: string,
+  status: string,
+  extra?: { cancelReason?: string; confirmationResponse?: string; confirmedAt?: Date }
+) {
+  return prisma.meeting.update({
+    where: { id },
+    data: { status, ...extra },
+  });
 }
 
 export async function getAllLeads() {

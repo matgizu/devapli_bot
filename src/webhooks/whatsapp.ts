@@ -4,6 +4,7 @@ import { WHATSAPP, HUMAN_BEHAVIOR } from "../config";
 import { processMessage } from "../bot/flow";
 import { sendWithHumanDelay, markAsRead, sendReaction } from "../whatsapp/sender";
 import { transcribeAudio } from "../whatsapp/transcribe";
+import { handleConfirmationReply } from "../reminders/scheduler";
 
 export const webhookRouter = Router();
 
@@ -128,6 +129,14 @@ async function processAndReply(
   text: string
 ): Promise<void> {
   try {
+    // ── Interceptar respuestas de confirmación de recordatorio ────────────
+    const confirmationReply = await handleConfirmationReply(waId, text);
+    if (confirmationReply) {
+      await sendWithHumanDelay(waId, confirmationReply);
+      return;
+    }
+
+    // ── Flujo normal con Claude ───────────────────────────────────────────
     const replies = await processMessage(waId, displayName, text);
     for (const reply of replies) {
       await sendWithHumanDelay(waId, reply);

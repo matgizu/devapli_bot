@@ -29,22 +29,40 @@ model Lead {
 }
 
 model Meeting {
-  id              String   @id @default(cuid())
-  waId            String
-  lead            Lead     @relation(fields: [waId], references: [waId])
-  scheduledAt     DateTime
-  slotId          String?
-  calendarEventId String?
-  attendeeName    String?
-  attendeeEmail   String?
-  attendeePhone   String?
-  status          String   @default("SCHEDULED")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                   String    @id @default(cuid())
+  waId                 String
+  lead                 Lead      @relation(fields: [waId], references: [waId])
+
+  scheduledAt          DateTime
+  endsAt               DateTime  // scheduledAt + 30 min
+
+  attendeeName         String?
+  attendeeEmail        String?
+  attendeePhone        String?
+
+  // Estado: SCHEDULED | CONFIRMED | CANCELLED | COMPLETED | NO_SHOW
+  status               String    @default("SCHEDULED")
+  cancelReason         String?
+
+  // Recordatorios
+  reminder24hSentAt    DateTime?
+  reminder2hSentAt     DateTime?
+
+  // Confirmación del prospecto (respuesta al recordatorio 24h)
+  confirmationResponse String?   // "YES" | "NO"
+  confirmedAt          DateTime?
+
+  // Link de videollamada (si aplica)
+  meetingUrl           String?
+
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([scheduledAt])
+  @@index([status])
 }
 
-// Sin FK a Lead — la conversación se crea desde el primer mensaje,
-// antes de que el Lead exista en la DB
+// Sin FK a Lead — la conversación se crea desde el primer mensaje
 model Conversation {
   id        String    @id @default(cuid())
   waId      String
@@ -59,7 +77,7 @@ model Message {
   id             String       @id @default(cuid())
   conversationId String
   conversation   Conversation @relation(fields: [conversationId], references: [id])
-  role           String
+  role           String       // "user" | "assistant"
   content        String       @db.Text
   createdAt      DateTime     @default(now())
 }

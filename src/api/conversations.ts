@@ -1,29 +1,225 @@
 import { Router, Request, Response } from "express";
-import { getAllConversations, getConversationHistory } from "../db/conversations";
-import { getAllLeads, getLeadByWaId } from "../leads/manager";
+import { prisma } from "../db/prisma";
+import { getConversationHistory } from "../db/conversations";
 import { botEvents, BotEvent } from "../events/emitter";
 
 export const apiRouter = Router();
 
-// ─── Leads ────────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// LEADS
+// ═══════════════════════════════════════════════════════════════════════════════
+
 apiRouter.get("/leads", async (_req: Request, res: Response) => {
-  const leads = await getAllLeads();
+  const leads = await prisma.lead.findMany({
+    orderBy: { createdAt: "desc" },
+    include: { meetings: { orderBy: { scheduledAt: "asc" } } },
+  });
+  res.json(leads);
+});
+
+apiRouter.get("/leads/qualified", async (_req: Request, res: Response) => {
+  const leads = await prisma.lead.findMany({
+    where: { qualified: true },
+    orderBy: { createdAt: "desc" },
+    include: { meetings: true },
+  });
+  res.json(leads);
+});
+
+apiRouter.get("/leads/disqualified", async (_req: Request, res: Response) => {
+  const leads = await prisma.lead.findMany({
+    where: { disqualified: true },
+    orderBy: { createdAt: "desc" },
+  });
   res.json(leads);
 });
 
 apiRouter.get("/leads/:waId", async (req: Request, res: Response) => {
-  const lead = await getLeadByWaId(String(req.params.waId));
-  if (!lead) {
-    res.status(404).json({ error: "Lead no encontrado" });
-    return;
-  }
+  const lead = await prisma.lead.findUnique({
+    where: { waId: String(req.params.waId) },
+    include: { meetings: { orderBy: { scheduledAt: "desc" } } },
+  });
+  if (!lead) { res.status(404).json({ error: "Lead no encontrado" }); return; }
   res.json(lead);
 });
 
-// ─── Conversaciones ───────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// MEETINGS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+apiRouter.get("/meetings", async (req: Request, res: Response) => {
+  const { status, from, to } = req.query;
+  const where: Record<string, unknown> = {};
+  if (status) where.status = String(status);
+  if (from || to) {
+    where.scheduledAt = {
+      ...(from && { gte: new Date(String(from)) }),
+      ...(to   && { lte: new Date(String(to)) }),
+    };
+  }
+  const meetings = await prisma.meeting.findMany({
+    where,
+    orderBy: { scheduledAt: "asc" },
+    include: { lead: { select: { name: true, displayName: true, businessName: true, businessType: true, email: true } } },
+  });
+  res.json(meetings);
+});
+
+apiRouter.get("/meetings/upcoming", async (_req: Request, res: Response) => {
+  const now = new Date();
+  const in7d = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const meetings = await prisma.meeting.findMany({
+    where: {
+      scheduledAt: { gte: now, lte: in7d },
+      status: { in: ["SCHEDULED", "CONFIRMED"] },
+    },
+    orderBy: { scheduledAt: "asc" },
+    include: { lead: { select: { name: true, displayName: true, businessName: true, email: true } } },
+  });
+  res.json(meetings);
+});
+
+apiRouter.get("/meetings/today", async (_req: Request, res: Response) => {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+  const meetings = await prisma.meeting.findMany({
+    where: { scheduledAt: { gte: start, lte: end } },
+    orderBy: { scheduledAt: "asc" },
+    include: { lead: { select: { name: true, displayName: true, businessName: true, email: true } } },
+  });
+  res.json(meetings);
+});
+
+apiRouter.get("/meetings/:id", async (req: Request, res: Response) => {
+  const meeting = await prisma.meeting.findUnique({
+    where: { id: String(req.params.id) },
+    include: { lead: true },
+  });
+  if (!meeting) { res.status(404).json({ error: "Reunión no encontrada" }); return; }
+  res.json(meeting);
+});
+
+// Actualizar estado de una reunión (para el módulo externo)
+apiRouter.patch("/meetings/:id", async (req: Request, res: Response) => {
+  const { status, cancelReason, meetingUrl } = req.body as {
+    status?: string;
+    cancelReason?: string;
+    meetingUrl?: string;
+  };
+  const validStatuses = ["SCHEDULED", "CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"];
+  if (status && !validStatuses.includes(status)) {
+    res.status(400).json({ error: `Estado inválido. Válidos: ${validStatuses.join(", ")}` });
+    return;
+  }
+  try {
+    const updated = await prisma.meeting.update({
+      where: { id: String(req.params.id) },
+      data: {
+        ...(status && { status }),
+        ...(cancelReason && { cancelReason }),
+        ...(meetingUrl && { meetingUrl }),
+      },
+    });
+    res.json(updated);
+  } catch {
+    res.status(404).json({ error: "Reunión no encontrada" });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DASHBOARD / TRACKING
+// ═══════════════════════════════════════════════════════════════════════════════
+
+apiRouter.get("/dashboard/stats", async (_req: Request, res: Response) => {
+  const [
+    totalLeads,
+    qualifiedLeads,
+    disqualifiedLeads,
+    pendingLeads,
+    totalMeetings,
+    scheduledMeetings,
+    confirmedMeetings,
+    completedMeetings,
+    cancelledMeetings,
+    noShowMeetings,
+  ] = await Promise.all([
+    prisma.lead.count(),
+    prisma.lead.count({ where: { qualified: true } }),
+    prisma.lead.count({ where: { disqualified: true } }),
+    prisma.lead.count({ where: { qualified: null, disqualified: false } }),
+    prisma.meeting.count(),
+    prisma.meeting.count({ where: { status: "SCHEDULED" } }),
+    prisma.meeting.count({ where: { status: "CONFIRMED" } }),
+    prisma.meeting.count({ where: { status: "COMPLETED" } }),
+    prisma.meeting.count({ where: { status: "CANCELLED" } }),
+    prisma.meeting.count({ where: { status: "NO_SHOW" } }),
+  ]);
+
+  const conversionLeadToMeeting =
+    qualifiedLeads > 0
+      ? Math.round((totalMeetings / qualifiedLeads) * 100)
+      : 0;
+
+  const conversionMeetingToComplete =
+    totalMeetings > 0
+      ? Math.round((completedMeetings / totalMeetings) * 100)
+      : 0;
+
+  res.json({
+    leads: {
+      total: totalLeads,
+      qualified: qualifiedLeads,
+      disqualified: disqualifiedLeads,
+      pending: pendingLeads,
+    },
+    meetings: {
+      total: totalMeetings,
+      scheduled: scheduledMeetings,
+      confirmed: confirmedMeetings,
+      completed: completedMeetings,
+      cancelled: cancelledMeetings,
+      noShow: noShowMeetings,
+    },
+    conversion: {
+      leadToMeeting: `${conversionLeadToMeeting}%`,
+      meetingToComplete: `${conversionMeetingToComplete}%`,
+    },
+    generatedAt: new Date().toISOString(),
+  });
+});
+
+apiRouter.get("/dashboard/funnel", async (_req: Request, res: Response) => {
+  // Funnel últimos 30 días
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const [leads30d, meetings30d, confirmed30d, completed30d] = await Promise.all([
+    prisma.lead.count({ where: { createdAt: { gte: since } } }),
+    prisma.meeting.count({ where: { createdAt: { gte: since } } }),
+    prisma.meeting.count({ where: { createdAt: { gte: since }, status: "CONFIRMED" } }),
+    prisma.meeting.count({ where: { createdAt: { gte: since }, status: "COMPLETED" } }),
+  ]);
+  res.json({
+    period: "últimos 30 días",
+    funnel: [
+      { stage: "Leads captados", count: leads30d },
+      { stage: "Reuniones agendadas", count: meetings30d },
+      { stage: "Reuniones confirmadas", count: confirmed30d },
+      { stage: "Reuniones completadas", count: completed30d },
+    ],
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONVERSACIONES
+// ═══════════════════════════════════════════════════════════════════════════════
+
 apiRouter.get("/conversations", async (_req: Request, res: Response) => {
-  const conversations = await getAllConversations();
-  res.json(conversations);
+  const convs = await prisma.conversation.findMany({
+    orderBy: { updatedAt: "desc" },
+    include: { messages: { orderBy: { createdAt: "desc" }, take: 1 } },
+  });
+  res.json(convs);
 });
 
 apiRouter.get("/conversations/:waId", async (req: Request, res: Response) => {
@@ -31,7 +227,10 @@ apiRouter.get("/conversations/:waId", async (req: Request, res: Response) => {
   res.json(messages);
 });
 
-// ─── SSE — eventos en tiempo real ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// SSE — eventos en tiempo real
+// ═══════════════════════════════════════════════════════════════════════════════
+
 apiRouter.get("/stream/events", (req: Request, res: Response) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
@@ -44,10 +243,7 @@ apiRouter.get("/stream/events", (req: Request, res: Response) => {
 
   botEvents.on("event", onEvent);
 
-  // Ping cada 30s para mantener la conexión
-  const ping = setInterval(() => {
-    res.write(": ping\n\n");
-  }, 30_000);
+  const ping = setInterval(() => res.write(": ping\n\n"), 30_000);
 
   req.on("close", () => {
     botEvents.off("event", onEvent);
