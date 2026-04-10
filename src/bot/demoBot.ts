@@ -3,27 +3,25 @@ import { CLAUDE } from "../config";
 
 const client = new Anthropic({ apiKey: CLAUDE.apiKey });
 
+// Keywords específicas de intención de COMPRAR/CONTRATAR un bot — no genéricas
 const DEMO_KEYWORDS = [
-  "bot",
-  "chatbot",
-  "automatizar",
-  "automático",
-  "whatsapp bot",
-  "cuánto cuesta el bot",
   "quiero un bot",
   "necesito un bot",
   "bot para mi negocio",
-  "responder automáticamente",
-  "respuestas automáticas",
-  "inteligencia artificial",
-  "ia para whatsapp",
-  "asistente virtual",
-  "cómo funciona el bot",
   "quiero el bot",
   "me interesa el bot",
   "precio del bot",
   "comprar el bot",
   "contratar el bot",
+  "cuánto cuesta el bot",
+  "whatsapp bot",
+  "chatbot para",
+  "ia para whatsapp",
+  "bot de whatsapp",
+  "bot para responder",
+  "automatizar mis mensajes",
+  "automatizar whatsapp",
+  "respuestas automáticas para",
 ];
 
 // Estado en memoria — si el servidor reinicia, Devapli recupera el estado por su cuenta
@@ -41,8 +39,9 @@ export async function detectBotIntent(message: string): Promise<boolean> {
         {
           role: "user",
           content:
-            `¿Este mensaje indica que la persona quiere comprar, conocer o saber el precio de un bot de WhatsApp para su negocio? ` +
-            `Responde solo: SI o NO. Mensaje: ${message}`,
+            `¿Este mensaje indica que la persona quiere COMPRAR o CONTRATAR un bot de WhatsApp o chatbot para automatizar mensajes de su negocio? ` +
+            `NO respondas SI si solo menciona inteligencia artificial, marketing digital, automatización de anuncios u otros servicios de agencia. ` +
+            `Solo SI si claramente quiere un bot/chatbot de WhatsApp. Responde solo: SI o NO. Mensaje: ${message}`,
         },
       ],
     });
