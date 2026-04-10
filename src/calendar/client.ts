@@ -1,9 +1,9 @@
-import axios from "axios";
-import { CALENDAR } from "../config";
+import { google } from "googleapis";
+import { CALENDAR, AGENCY } from "../config";
 
 export interface CalendarSlot {
-  id: string;       // ID único del slot para hacer la reserva
-  time: string;     // ISO datetime (ej: "2024-01-15T10:00:00.000Z")
+  id: string;    // ISO datetime — se usa como ID para reservar
+  time: string;  // ISO datetime
 }
 
 export interface BookingResult {
@@ -14,7 +14,7 @@ export interface BookingResult {
 }
 
 export interface BookingDetails {
-  slotTime: string;  // ISO datetime
+  slotTime: string;
   slotId?: string;
   attendeeName: string;
   attendeeEmail: string;
@@ -22,152 +22,157 @@ export interface BookingDetails {
   timezone?: string;
 }
 
-// ─── Interfaz común para cualquier proveedor ──────────────────────────────────
 export interface CalendarProvider {
   getAvailableSlots(): Promise<CalendarSlot[]>;
   bookSlot(details: BookingDetails): Promise<BookingResult>;
 }
 
-// ─── Implementación Cal.com v2 ────────────────────────────────────────────────
-class CalComClient implements CalendarProvider {
-  private readonly headers: Record<string, string>;
-  private readonly baseUrl: string;
-  private readonly eventTypeId: number;
-  private readonly eventTypeSlug: string;
-  private readonly username: string;
-  private readonly timezone: string;
+// ─── Google Calendar ──────────────────────────────────────────────────────────
+class GoogleCalendarClient implements CalendarProvider {
+  private readonly calendarId: string;
+  private readonly tz: string;
 
   constructor() {
-    const cfg = CALENDAR.calcom;
-    this.baseUrl = cfg.baseUrl;
-    this.eventTypeId = cfg.eventTypeId;
-    this.eventTypeSlug = cfg.eventTypeSlug;
-    this.username = cfg.username;
-    this.timezone = CALENDAR.timezone;
-    this.headers = {
-      Authorization: `Bearer ${cfg.apiKey}`,
-      "Content-Type": "application/json",
-      "cal-api-version": "2024-08-13",
-    };
+    this.calendarId = CALENDAR.google.calendarId;
+    this.tz = CALENDAR.timezone;
+  }
+
+  private getClient() {
+    const auth = new google.auth.GoogleAuth({
+      credentials: {
+        client_email: CALENDAR.google.clientEmail,
+        private_key: CALENDAR.google.privateKey,
+      },
+      scopes: ["https://www.googleapis.com/auth/calendar"],
+    });
+    return google.calendar({ version: "v3", auth });
   }
 
   async getAvailableSlots(): Promise<CalendarSlot[]> {
+    const calendar = this.getClient();
     const now = new Date();
-    const start = now.toISOString();
-    const end = new Date(
-      now.getTime() + CALENDAR.daysAhead * 24 * 60 * 60 * 1000
-    ).toISOString();
+    const end = new Date(now.getTime() + CALENDAR.daysAhead * 24 * 60 * 60 * 1000);
 
     try {
-      const res = await axios.get(`${this.baseUrl}/slots/available`, {
-        headers: this.headers,
-        params: {
-          startTime: start,
-          endTime: end,
-          eventTypeId: this.eventTypeId,
-          eventTypeSlug: this.eventTypeSlug,
-          username: this.username,
+      // Consultar períodos ocupados
+      const freeBusy = await calendar.freebusy.query({
+        requestBody: {
+          timeMin: now.toISOString(),
+          timeMax: end.toISOString(),
+          timeZone: this.tz,
+          items: [{ id: this.calendarId }],
         },
       });
 
-      // Cal.com v2 responde con data.slots (objeto con fechas como llaves)
-      const slotsData: Record<string, { time: string }[]> =
-        res.data?.data?.slots ?? res.data?.slots ?? {};
+      const busyPeriods = (freeBusy.data.calendars?.[this.calendarId]?.busy ?? []).map(
+        (b) => ({ start: new Date(b.start!), end: new Date(b.end!) })
+      );
 
+      // Generar slots candidatos dentro del horario laboral
       const slots: CalendarSlot[] = [];
-      for (const daySlots of Object.values(slotsData)) {
-        for (const s of daySlots) {
-          slots.push({
-            id: s.time, // En Cal.com v2 el time mismo funciona como ID para reservar
-            time: s.time,
-          });
+      const cursor = new Date(now);
+      cursor.setMinutes(0, 0, 0);
+      cursor.setHours(cursor.getHours() + 1); // Empezar desde la próxima hora completa
+
+      while (cursor < end && slots.length < CALENDAR.maxSlotsToShow) {
+        const localHour = this.localHour(cursor);
+        const dayOfWeek = this.localDay(cursor); // 0=dom, 6=sab
+
+        const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
+        const isWorkingHour =
+          localHour >= CALENDAR.workingHours.start &&
+          localHour < CALENDAR.workingHours.end;
+
+        if (isWeekday && isWorkingHour) {
+          const slotEnd = new Date(cursor.getTime() + CALENDAR.meetingDurationMin * 60 * 1000);
+          const isFree = !busyPeriods.some(
+            (b) => cursor < b.end && slotEnd > b.start
+          );
+
+          if (isFree) {
+            slots.push({ id: cursor.toISOString(), time: cursor.toISOString() });
+          }
         }
+
+        cursor.setHours(cursor.getHours() + 1);
       }
 
-      // Tomar los primeros N slots disponibles
-      return slots.slice(0, CALENDAR.maxSlotsToShow);
+      return slots;
     } catch (error: unknown) {
-      const err = error as { response?: { data?: unknown }; message?: string };
-      console.error(
-        "[calendar] Error obteniendo slots de Cal.com:",
-        err.response?.data ?? err.message
-      );
+      const err = error as { message?: string };
+      console.error("[calendar] Error obteniendo slots de Google Calendar:", err.message);
       return [];
     }
   }
 
   async bookSlot(details: BookingDetails): Promise<BookingResult> {
-    try {
-      const res = await axios.post(
-        `${this.baseUrl}/bookings`,
-        {
-          start: details.slotTime,
-          eventTypeId: this.eventTypeId,
-          attendee: {
-            name: details.attendeeName,
-            email: details.attendeeEmail,
-            timeZone: details.timezone ?? this.timezone,
-            phoneNumber: details.attendeePhone,
-          },
-          meetingUrl: "https://cal.com/video", // Cal.com agrega el link automáticamente
-        },
-        { headers: this.headers }
-      );
+    const calendar = this.getClient();
+    const start = new Date(details.slotTime);
+    const end = new Date(start.getTime() + CALENDAR.meetingDurationMin * 60 * 1000);
 
-      const booking = res.data?.data ?? res.data;
+    try {
+      const event = await calendar.events.insert({
+        calendarId: this.calendarId,
+        conferenceDataVersion: 1,
+        requestBody: {
+          summary: `${AGENCY.meetingTitle} — ${details.attendeeName}`,
+          description:
+            `${AGENCY.meetingDescription}\n\nTeléfono: ${details.attendeePhone}`,
+          start: { dateTime: start.toISOString(), timeZone: details.timezone ?? this.tz },
+          end: { dateTime: end.toISOString(), timeZone: details.timezone ?? this.tz },
+          attendees: [
+            { email: details.attendeeEmail, displayName: details.attendeeName },
+          ],
+          conferenceData: {
+            createRequest: {
+              requestId: `meet-${Date.now()}`,
+              conferenceSolutionKey: { type: "hangoutsMeet" },
+            },
+          },
+        },
+      });
+
       return {
         success: true,
-        calendarEventId: String(booking?.id ?? booking?.uid ?? ""),
-        meetingUrl: booking?.videoCallUrl ?? booking?.meetingUrl ?? undefined,
+        calendarEventId: event.data.id ?? undefined,
+        meetingUrl: event.data.hangoutLink ?? undefined,
       };
     } catch (error: unknown) {
-      const err = error as { response?: { data?: unknown }; message?: string };
-      console.error(
-        "[calendar] Error creando booking en Cal.com:",
-        err.response?.data ?? err.message
-      );
-      return { success: false, error: String(err.message ?? "Error desconocido") };
+      const err = error as { message?: string };
+      console.error("[calendar] Error creando evento en Google Calendar:", err.message);
+      return { success: false, error: err.message };
     }
+  }
+
+  // Hora local en Bogotá (UTC-5)
+  private localHour(date: Date): number {
+    return parseInt(
+      date.toLocaleString("es-CO", { hour: "numeric", hour12: false, timeZone: this.tz }),
+      10
+    );
+  }
+
+  // Día de la semana local en Bogotá
+  private localDay(date: Date): number {
+    return new Date(date.toLocaleString("en-US", { timeZone: this.tz })).getDay();
   }
 }
 
-// ─── Implementación personalizada (para la API que el usuario provea) ─────────
-// TODO: cuando el usuario provea su API de calendario, implementar aquí
+// ─── Proveedor custom (para futuras integraciones) ────────────────────────────
 class CustomCalendarClient implements CalendarProvider {
-  private readonly baseUrl: string;
-  private readonly apiKey: string;
-
-  constructor() {
-    this.baseUrl = CALENDAR.custom.baseUrl;
-    this.apiKey = CALENDAR.custom.apiKey;
-  }
-
   async getAvailableSlots(): Promise<CalendarSlot[]> {
-    // TODO: implementar según la API del usuario
-    // Ejemplo genérico:
-    const res = await axios.get(`${this.baseUrl}/slots`, {
-      headers: { Authorization: `Bearer ${this.apiKey}` },
-    });
-    return res.data.slots as CalendarSlot[];
+    // TODO: implementar cuando sea necesario
+    return [];
   }
-
-  async bookSlot(details: BookingDetails): Promise<BookingResult> {
-    // TODO: implementar según la API del usuario
-    const res = await axios.post(
-      `${this.baseUrl}/bookings`,
-      { slot: details.slotTime, attendee: details },
-      { headers: { Authorization: `Bearer ${this.apiKey}` } }
-    );
-    return { success: true, calendarEventId: res.data.id };
+  async bookSlot(_details: BookingDetails): Promise<BookingResult> {
+    return { success: false, error: "Proveedor custom no implementado" };
   }
 }
 
 // ─── Factory ──────────────────────────────────────────────────────────────────
 export function createCalendarClient(): CalendarProvider {
-  if (CALENDAR.provider === "custom") {
-    return new CustomCalendarClient();
-  }
-  return new CalComClient();
+  if (CALENDAR.provider === "custom") return new CustomCalendarClient();
+  return new GoogleCalendarClient();
 }
 
 export const calendarClient = createCalendarClient();

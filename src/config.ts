@@ -22,25 +22,25 @@ export const QUALIFICATION = {
   MIN_BUSINESS_AGE_MONTHS: 6,
 };
 
-// ─── Calendario ───────────────────────────────────────────────────────────────
+// ─── Calendario (Google Calendar) ────────────────────────────────────────────
 export const CALENDAR = {
-  provider: "calcom" as "calcom" | "custom",
-  calcom: {
-    apiKey: process.env.CALCOM_API_KEY || "",
-    baseUrl: "https://api.cal.com/v2",
-    eventTypeId: parseInt(process.env.CALCOM_EVENT_TYPE_ID || "0", 10),
-    eventTypeSlug: process.env.CALCOM_EVENT_TYPE_SLUG || "sesion-estrategica",
-    username: process.env.CALCOM_USERNAME || "",
+  provider: "google" as "google" | "custom",
+  google: {
+    clientEmail: process.env.GOOGLE_CLIENT_EMAIL || "",
+    // La private key viene con \n literales desde las variables de entorno
+    privateKey: (process.env.GOOGLE_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
+    calendarId: process.env.GOOGLE_CALENDAR_ID || "primary",
   },
-  // Para proveedor personalizado — rellenar cuando el usuario provea la API
   custom: {
     baseUrl: process.env.CALENDAR_API_URL || "",
     apiKey: process.env.CALENDAR_API_KEY || "",
   },
   timezone: process.env.TZ || "America/Bogota",
-  // Cuántos días hacia adelante mostrar disponibilidad
+  // Horario de atención (hora local Bogotá)
+  workingHours: { start: 9, end: 18 },   // 9am – 6pm
+  // Duración de cada reunión en minutos
+  meetingDurationMin: 30,
   daysAhead: 7,
-  // Máximo de slots a mostrar al cliente
   maxSlotsToShow: 5,
 };
 
@@ -56,7 +56,7 @@ export const WHATSAPP = {
 export const CLAUDE = {
   apiKey: process.env.ANTHROPIC_API_KEY || "",
   model: "claude-haiku-4-5-20251001",
-  maxTokens: 1024,
+  maxTokens: 400,        // ~100 tokens de mensaje + overhead del JSON
   maxHistoryTurns: 16,
 };
 
@@ -66,6 +66,7 @@ export const HUMAN_BEHAVIOR = {
   typingBaseMs: 600,
   typingPerWordMs: 40,
   typingMaxMs: 4500,
+  firstMessageDelayMs: 10_000,  // 10s en el primer mensaje para parecer humano
 };
 
 // ─── Remarketing ─────────────────────────────────────────────────────────────

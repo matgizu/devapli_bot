@@ -11,7 +11,9 @@ import { persistMessage } from "../db/conversations";
 import { botEvents } from "../events/emitter";
 import { restartRemarketingTimer, cancelFollowUp } from "./remarketing";
 import { sendProofImages } from "../whatsapp/sender";
-import { PROOF_IMAGES } from "../config";
+import { PROOF_IMAGES, HUMAN_BEHAVIOR } from "../config";
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export const FALLBACK_MESSAGE =
   "Hola, gracias por escribirnos. Soy Aria de la agencia — ¿en qué puedo ayudarte hoy?";
@@ -136,8 +138,12 @@ export async function processMessage(
       ts: Date.now(),
     });
 
-    // ── Imágenes de prueba en el primer mensaje ────────────────────────────
-    // Se envían ~3s después del texto para que lleguen justo después del saludo
+    // ── Delay humano en primer mensaje (10s) ──────────────────────────────
+    if (isFirstMessage) {
+      await sleep(HUMAN_BEHAVIOR.firstMessageDelayMs);
+    }
+
+    // ── Imágenes de prueba justo después del saludo ────────────────────────
     if (isFirstMessage && PROOF_IMAGES.length > 0) {
       setTimeout(() => {
         sendProofImages(waId).catch((err) =>
