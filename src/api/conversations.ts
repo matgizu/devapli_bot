@@ -1,6 +1,5 @@
 import { Router, Request, Response } from "express";
 import { prisma } from "../db/prisma";
-import { getConversationHistory } from "../db/conversations";
 import { botEvents, BotEvent } from "../events/emitter";
 
 export const apiRouter = Router();
@@ -217,14 +216,63 @@ apiRouter.get("/dashboard/funnel", async (_req: Request, res: Response) => {
 apiRouter.get("/conversations", async (_req: Request, res: Response) => {
   const convs = await prisma.conversation.findMany({
     orderBy: { updatedAt: "desc" },
-    include: { messages: { orderBy: { createdAt: "desc" }, take: 1 } },
+    include: {
+      messages: { orderBy: { createdAt: "desc" }, take: 1 },
+      _count: { select: { messages: true } },
+    },
   });
-  res.json(convs);
+
+  // Traer leads asociados en paralelo para obtener customerName
+  const waIds = convs.map((c) => c.waId);
+  const leads = await prisma.lead.findMany({
+    where: { waId: { in: waIds } },
+    select: { waId: true, name: true, displayName: true },
+  });
+  const leadMap = new Map(leads.map((l) => [l.waId, l.name ?? l.displayName ?? null]));
+
+  const data = convs.map((c) => ({
+    waId: c.waId,
+    customerName: leadMap.get(c.waId) ?? null,
+    lastActivity: new Date(c.updatedAt).getTime(),
+    lastMessage: c.messages[0]?.content ?? "",
+    messageCount: c._count.messages,
+  }));
+
+  res.json({ ok: true, data });
 });
 
 apiRouter.get("/conversations/:waId", async (req: Request, res: Response) => {
-  const messages = await getConversationHistory(String(req.params.waId), 100);
-  res.json(messages);
+  const waId = String(req.params.waId);
+
+  const conv = await prisma.conversation.findFirst({
+    where: { waId },
+    include: {
+      messages: { orderBy: { createdAt: "asc" } },
+    },
+  });
+
+  if (!conv) {
+    res.status(404).json({ ok: false, error: "Not found" });
+    return;
+  }
+
+  const lead = await prisma.lead.findUnique({
+    where: { waId },
+    select: { name: true, displayName: true },
+  });
+
+  res.json({
+    ok: true,
+    data: {
+      waId,
+      customerName: lead?.name ?? lead?.displayName ?? null,
+      messages: conv.messages.map((m) => ({
+        role: m.role,
+        text: m.content,
+        ts: new Date(m.createdAt).getTime(),
+      })),
+    },
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
