@@ -13,24 +13,47 @@ function formatBudget(amount: number): string {
 function formatSlotsForPrompt(slots: CalendarSlot[]): string {
   if (!slots.length) return "No hay horarios disponibles en este momento.";
 
-  return slots
-    .map((s, i) => {
-      const date = new Date(s.time);
-      const formatted = date.toLocaleDateString("es-CO", {
-        weekday: "long",
-        day: "numeric",
-        month: "long",
-        timeZone: "America/Bogota",
-      });
-      const time = date.toLocaleTimeString("es-CO", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-        timeZone: "America/Bogota",
-      });
-      return `• Opción ${i + 1}: ${formatted} a las ${time} [slotId: ${s.id}]`;
-    })
-    .join("\n");
+  const lines = slots.map((s, i) => {
+    const date = new Date(s.time);
+    const formatted = date.toLocaleDateString("es-CO", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      timeZone: "America/Bogota",
+    });
+    const time = date.toLocaleTimeString("es-CO", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: "America/Bogota",
+    });
+    return `• Opción ${i + 1}: ${formatted} a las ${time} hora Colombia [slotId: ${s.id}]`;
+  });
+
+  return (
+    lines.join("\n") +
+    "\n\n⚠️ Todos los horarios están en hora de Colombia (COT, UTC-5). " +
+    "Si el cliente menciona que está en otro país o en otra zona horaria, " +
+    "convertile el horario elegido a su hora local y confirmalo antes de reservar."
+  );
+}
+
+function nowInColombia(): string {
+  const now = new Date();
+  const fecha = now.toLocaleDateString("es-CO", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "America/Bogota",
+  });
+  const hora = now.toLocaleTimeString("es-CO", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "America/Bogota",
+  });
+  return `${fecha}, ${hora} (hora Colombia)`;
 }
 
 export function buildSystemPrompt(lead: LeadInfo, availableSlots?: CalendarSlot[]): string {
@@ -42,16 +65,22 @@ export function buildSystemPrompt(lead: LeadInfo, availableSlots?: CalendarSlot[
   const slotsSection = availableSlots?.length
     ? `
 ## HORARIOS DISPONIBLES (actualizados en tiempo real)
-Preséntaselos al cliente de forma clara:
+Presentalos con claridad. Todos están en hora Colombia (COT, UTC-5):
 
 ${formatSlotsForPrompt(availableSlots)}
 
-Cuando el cliente elija un horario, incluí el slotId exacto en el campo "slotId" del leadUpdate.
-Si el cliente dice "la opción 2" o "el martes", identificá el slot correcto.
+Cuando el cliente elija un horario:
+- Identificá el slot correcto aunque diga "la opción 2", "el viernes", "mañana a las 3", etc.
+- Usá la FECHA ACTUAL que está en el contexto para calcular qué día es "hoy", "mañana", "el viernes", etc.
+- Incluí el slotId exacto en leadUpdate.slotId
 `
     : "";
 
   const sessionContext = `
+## FECHA Y HORA ACTUAL
+${nowInColombia()}
+Usá esta fecha para interpretar referencias como "hoy", "mañana", "el viernes", "esta semana", etc.
+
 ## CONTEXTO ACTUAL DEL PROSPECTO
 - Nombre: ${lead.name || "aún no lo dio"}
 - Negocio: ${lead.businessName || "aún no lo dio"}

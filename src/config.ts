@@ -56,7 +56,7 @@ export const WHATSAPP = {
 export const CLAUDE = {
   apiKey: process.env.ANTHROPIC_API_KEY || "",
   model: "claude-haiku-4-5-20251001",
-  maxTokens: 400,        // ~100 tokens de mensaje + overhead del JSON
+  maxTokens: 900,        // suficiente para JSON + slots + mensaje
   maxHistoryTurns: 16,
 };
 

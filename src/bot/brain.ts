@@ -75,11 +75,21 @@ function parseClaudeResponse(raw: string): ClaudeResponse {
   // Extraer JSON de la respuesta (puede venir envuelto en markdown)
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    console.error("[brain] Claude no devolvió JSON válido:", raw.slice(0, 200));
+    // Claude respondió en texto plano — usarlo como mensaje directamente
+    // en lugar de mostrar el error genérico al usuario
+    const cleanText = raw.trim();
+    console.warn("[brain] Claude respondió en texto plano (sin JSON):", cleanText.slice(0, 150));
+    if (cleanText.length > 0) {
+      return {
+        message: cleanText,
+        state: "SCHEDULING",  // mantener el estado actual — no hacer regresión
+        action: null,
+      };
+    }
+    console.error("[brain] Respuesta vacía de Claude");
     return {
-      message:
-        "Disculpá, tuve un inconveniente técnico. ¿Podés repetir tu mensaje?",
-      state: "GREETING",
+      message: "Disculpá, tuve un inconveniente. ¿Podés repetir?",
+      state: "SCHEDULING",
       action: null,
     };
   }
