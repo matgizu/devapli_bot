@@ -1,6 +1,9 @@
 import { Router, Request, Response } from "express";
 import { prisma } from "../db/prisma";
 import { botEvents, BotEvent } from "../events/emitter";
+import { sendText } from "../whatsapp/sender";
+import { persistMessage } from "../db/conversations";
+import { isAutomationEnabled, setAutomation } from "../automation";
 
 export const apiRouter = Router();
 
@@ -273,6 +276,48 @@ apiRouter.get("/conversations/:waId", async (req: Request, res: Response) => {
       })),
     },
   });
+});
+
+// ─── POST /conversations/:waId/send ──────────────────────────────────────────
+apiRouter.post("/conversations/:waId/send", async (req: Request, res: Response) => {
+  const waId = String(req.params.waId);
+  const { text } = req.body as { text?: string };
+
+  if (!text?.trim()) {
+    res.status(400).json({ ok: false, error: "El campo 'text' es requerido" });
+    return;
+  }
+
+  try {
+    await sendText(waId, text.trim());
+    await persistMessage(waId, "assistant", text.trim());
+    res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Error al enviar mensaje";
+    console.error(`[api] Error enviando mensaje manual a ${waId}:`, err);
+    res.status(502).json({ ok: false, error: message });
+  }
+});
+
+// ─── GET /conversations/:waId/automation ─────────────────────────────────────
+apiRouter.get("/conversations/:waId/automation", (req: Request, res: Response) => {
+  const waId = String(req.params.waId);
+  res.json({ ok: true, enabled: isAutomationEnabled(waId) });
+});
+
+// ─── PATCH /conversations/:waId/automation ───────────────────────────────────
+apiRouter.patch("/conversations/:waId/automation", (req: Request, res: Response) => {
+  const waId = String(req.params.waId);
+  const { enabled } = req.body as { enabled?: boolean };
+
+  if (typeof enabled !== "boolean") {
+    res.status(400).json({ ok: false, error: "El campo 'enabled' debe ser boolean" });
+    return;
+  }
+
+  setAutomation(waId, enabled);
+  console.log(`[automation] ${waId} → ${enabled ? "ON" : "OFF"}`);
+  res.json({ ok: true, enabled });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

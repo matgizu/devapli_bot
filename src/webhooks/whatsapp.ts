@@ -5,6 +5,8 @@ import { processMessage } from "../bot/flow";
 import { sendWithHumanDelay, markAsRead, sendReaction } from "../whatsapp/sender";
 import { transcribeAudio } from "../whatsapp/transcribe";
 import { handleConfirmationReply } from "../reminders/scheduler";
+import { isAutomationEnabled } from "../automation";
+import { persistMessage } from "../db/conversations";
 
 export const webhookRouter = Router();
 
@@ -129,6 +131,13 @@ async function processAndReply(
   text: string
 ): Promise<void> {
   try {
+    // ── Si la automatización está desactivada, solo guardar y salir ───────
+    if (!isAutomationEnabled(waId)) {
+      await persistMessage(waId, "user", text);
+      console.log(`[webhook] Automatización OFF para ${waId} — mensaje guardado sin responder`);
+      return;
+    }
+
     // ── Interceptar respuestas de confirmación de recordatorio ────────────
     const confirmationReply = await handleConfirmationReply(waId, text);
     if (confirmationReply) {
