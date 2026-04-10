@@ -12,6 +12,7 @@ import { botEvents } from "../events/emitter";
 import { restartRemarketingTimer, cancelFollowUp } from "./remarketing";
 import { sendProofImages } from "../whatsapp/sender";
 import { PROOF_IMAGES, HUMAN_BEHAVIOR } from "../config";
+import { sendTelegramMessage } from "../notifications/telegram";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -117,6 +118,21 @@ export async function processMessage(
             scheduledAt: session.lead.selectedSlot,
             ts: Date.now(),
           });
+
+          // ── Notificación Telegram ────────────────────────────────────────
+          const fechaReunion = new Date(session.lead.selectedSlot).toLocaleString("es-CO", {
+            weekday: "long", day: "numeric", month: "long",
+            hour: "2-digit", minute: "2-digit", hour12: true,
+            timeZone: "America/Bogota",
+          });
+          await sendTelegramMessage(
+            `📅 <b>Nueva reunión agendada</b>\n\n` +
+            `👤 <b>Nombre:</b> ${session.lead.name ?? session.displayName}\n` +
+            `📱 <b>WhatsApp:</b> +${waId}\n` +
+            `✉️ <b>Email:</b> ${session.lead.email ?? "—"}\n` +
+            `🏢 <b>Negocio:</b> ${session.lead.businessName ?? "—"}\n` +
+            `📆 <b>Fecha:</b> ${fechaReunion} (hora Colombia)`
+          );
         }
       } else {
         console.error("[flow] Error al reservar reunión:", bookResult.error);
