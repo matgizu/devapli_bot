@@ -36,6 +36,7 @@ export interface Session {
   lead: LeadInfo;
   availableSlots?: CalendarSlot[];  // Inyectados cuando Claude dispara CHECK_CALENDAR
   meetingBooked: boolean;
+  paused: boolean;  // true cuando se requiere intervención humana (sospecha de IA)
   remarketingTimer?: ReturnType<typeof setTimeout>;
   remarketingCount: number;   // cuántos follow-ups se han enviado
   createdAt: Date;
@@ -57,6 +58,7 @@ export function getSession(waId: string, displayName: string): Session {
       history: [],
       lead: { phone: waId },
       meetingBooked: false,
+      paused: false,
       remarketingCount: 0,
       createdAt: new Date(),
       updatedAt: new Date(),

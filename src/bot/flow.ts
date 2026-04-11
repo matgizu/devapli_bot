@@ -12,7 +12,7 @@ import { botEvents } from "../events/emitter";
 import { restartRemarketingTimer, cancelFollowUp } from "./remarketing";
 import { sendProofImages } from "../whatsapp/sender";
 import { PROOF_IMAGES, HUMAN_BEHAVIOR } from "../config";
-import { notifyMeetingBooked } from "../notifications/notify";
+import { notifyMeetingBooked, notifyHumanTakeover } from "../notifications/notify";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -25,6 +25,12 @@ export async function processMessage(
   userText: string
 ): Promise<string[]> {
   const session = getSession(waId, displayName);
+
+  // Si el bot está pausado por intervención humana, ignorar mensajes entrantes
+  if (session.paused) {
+    console.log(`[flow] Bot pausado para ${waId} — mensaje ignorado`);
+    return [];
+  }
 
   // Detectar si es el primer mensaje de la conversación (antes de agregar el actual)
   const isFirstMessage = session.history.length === 0;
@@ -93,6 +99,18 @@ export async function processMessage(
       });
     }
 
+    // ── Acción: HUMAN_TAKEOVER ─────────────────────────────────────────────
+    if (claudeRes.action === "HUMAN_TAKEOVER") {
+      console.log(`[flow] HUMAN_TAKEOVER para ${waId} — pausando bot y notificando`);
+      updateSession(waId, { paused: true });
+      cancelFollowUp(waId);
+      await notifyHumanTakeover({
+        name: session.lead.name ?? session.displayName,
+        waId,
+        businessName: session.lead.businessName ?? "",
+      });
+    }
+
     // ── Acción: BOOK_MEETING ───────────────────────────────────────────────
     if (claudeRes.action === "BOOK_MEETING" && !session.meetingBooked) {
       const bookResult = await bookMeeting(session, waId, displayName);
@@ -126,6 +144,7 @@ export async function processMessage(
             email: session.lead.email ?? "",
             businessName: session.lead.businessName ?? "",
             scheduledAt: session.lead.selectedSlot,
+            monthlyBudget: session.lead.monthlyBudget,
           });
         }
       } else {

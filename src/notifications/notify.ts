@@ -6,6 +6,7 @@ export async function notifyMeetingBooked(params: {
   email: string;
   businessName: string;
   scheduledAt: string;
+  monthlyBudget?: string;
 }): Promise<void> {
   const notifyNumber = process.env.NOTIFY_WHATSAPP_NUMBER;
   if (!notifyNumber) return;
@@ -26,11 +27,35 @@ export async function notifyMeetingBooked(params: {
     `📱 +${params.waId}\n` +
     `✉️ ${params.email || "—"}\n` +
     `🏢 ${params.businessName || "—"}\n` +
+    `💰 Presupuesto pauta: ${params.monthlyBudget || "—"}\n` +
     `📆 ${fecha} (hora Colombia)`;
 
   try {
     await sendText(notifyNumber, msg);
   } catch (error) {
     console.error("[notify] Error enviando notificación WhatsApp:", error);
+  }
+}
+
+export async function notifyHumanTakeover(params: {
+  name: string;
+  waId: string;
+  businessName: string;
+}): Promise<void> {
+  const notifyNumber = process.env.NOTIFY_WHATSAPP_NUMBER;
+  if (!notifyNumber) return;
+
+  const msg =
+    `⚠️ *Intervención humana requerida*\n\n` +
+    `El cliente sospecha que está hablando con una IA.\n\n` +
+    `👤 ${params.name || "Sin nombre"}\n` +
+    `📱 +${params.waId}\n` +
+    `🏢 ${params.businessName || "—"}\n\n` +
+    `El bot está pausado. Entrá a la conversación manualmente.`;
+
+  try {
+    await sendText(notifyNumber, msg);
+  } catch (error) {
+    console.error("[notify] Error enviando notificación de takeover:", error);
   }
 }

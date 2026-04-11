@@ -25,7 +25,7 @@ export interface ClaudeResponse {
   message: string;
   state: ConversationState;
   leadUpdate?: LeadUpdate;
-  action?: "CHECK_CALENDAR" | "BOOK_MEETING" | null;
+  action?: "CHECK_CALENDAR" | "BOOK_MEETING" | "HUMAN_TAKEOVER" | null;
 }
 
 export async function askClaude(
@@ -55,6 +55,7 @@ export async function askClaude(
     const response = await client.messages.create({
       model: CLAUDE.model,
       max_tokens: CLAUDE.maxTokens,
+      temperature: 0.3,
       system: systemPrompt,
       messages,
     });
