@@ -26,9 +26,11 @@ export async function processMessage(
 ): Promise<string[]> {
   const session = getSession(waId, displayName);
 
-  // Si el bot está pausado por intervención humana, ignorar mensajes entrantes
+  // Si el bot está pausado por intervención humana, registrar el mensaje pero no responder
   if (session.paused) {
-    console.log(`[flow] Bot pausado para ${waId} — mensaje ignorado`);
+    await persistMessage(waId, "user", userText);
+    session.history.push({ role: "user", content: userText });
+    console.log(`[flow] Bot pausado para ${waId} — mensaje guardado en contexto sin responder`);
     return [];
   }
 

@@ -4,7 +4,7 @@ import { botEvents, BotEvent } from "../events/emitter";
 import { sendText } from "../whatsapp/sender";
 import { persistMessage } from "../db/conversations";
 import { isAutomationEnabled, setAutomation } from "../automation";
-import { getSessionState } from "../bot/session";
+import { getSessionState, pushToSessionHistory, updateSession, getExistingSession } from "../bot/session";
 
 export const apiRouter = Router();
 
@@ -300,12 +300,29 @@ apiRouter.post("/conversations/:waId/send", async (req: Request, res: Response) 
   try {
     await sendText(waId, text.trim());
     await persistMessage(waId, "assistant", text.trim());
+    // Actualizar historial en memoria para que Claude tenga contexto de lo que dijo el humano
+    pushToSessionHistory(waId, "assistant", text.trim());
     res.json({ ok: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error al enviar mensaje";
     console.error(`[api] Error enviando mensaje manual a ${waId}:`, err);
     res.status(502).json({ ok: false, error: message });
   }
+});
+
+// ─── PATCH /conversations/:waId/unpause ──────────────────────────────────────
+apiRouter.patch("/conversations/:waId/unpause", (req: Request, res: Response) => {
+  const waId = String(req.params.waId);
+  const session = getExistingSession(waId);
+
+  if (!session) {
+    res.status(404).json({ ok: false, error: "Sesión no encontrada" });
+    return;
+  }
+
+  updateSession(waId, { paused: false });
+  console.log(`[api] Bot despausado para ${waId}`);
+  res.json({ ok: true, paused: false });
 });
 
 // ─── GET /conversations/:waId/automation ─────────────────────────────────────

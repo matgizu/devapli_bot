@@ -86,6 +86,21 @@ export function getSessionState(waId: string): ConversationState | null {
   return sessions.get(waId)?.state ?? null;
 }
 
+export function getExistingSession(waId: string): Session | null {
+  return sessions.get(waId) ?? null;
+}
+
+export function pushToSessionHistory(
+  waId: string,
+  role: "user" | "assistant",
+  content: string
+): void {
+  const session = sessions.get(waId);
+  if (!session) return;
+  session.history.push({ role, content });
+  session.updatedAt = new Date();
+}
+
 export function clearRemarketingTimer(waId: string): void {
   const session = sessions.get(waId);
   if (session?.remarketingTimer) {

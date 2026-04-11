@@ -5,6 +5,7 @@ import path from "path";
 import { webhookRouter } from "./webhooks/whatsapp";
 import { apiRouter } from "./api/conversations";
 import { startReminderScheduler } from "./reminders/scheduler";
+import { initRemarketingFromDB } from "./bot/remarketing";
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "3000", 10);
@@ -40,6 +41,10 @@ app.use(express.static(path.join(__dirname, "../public")));
 startReminderScheduler();
 
 app.listen(PORT, () => {
+  // Restaurar timers de remarketing desde DB para todos los contactos activos
+  initRemarketingFromDB().catch((err) =>
+    console.error("[startup] Error en initRemarketingFromDB:", err)
+  );
   console.log(`
   ╔══════════════════════════════════════════════════╗
   ║       BOT AGENCIA — Servidor iniciado            ║
