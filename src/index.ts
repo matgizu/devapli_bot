@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import path from "path";
 import { webhookRouter } from "./webhooks/whatsapp";
 import { apiRouter } from "./api/conversations";
 import { startReminderScheduler } from "./reminders/scheduler";
@@ -31,6 +32,9 @@ app.get("/health", (_req, res) => {
 
 app.use("/webhook/whatsapp", webhookRouter);
 app.use("/api", apiRouter);
+
+// Panel de conversaciones
+app.use(express.static(path.join(__dirname, "../public")));
 
 // ─── Iniciar servidor ─────────────────────────────────────────────────────────
 startReminderScheduler();

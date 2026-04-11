@@ -4,6 +4,7 @@ import { botEvents, BotEvent } from "../events/emitter";
 import { sendText } from "../whatsapp/sender";
 import { persistMessage } from "../db/conversations";
 import { isAutomationEnabled, setAutomation } from "../automation";
+import { getSessionState } from "../bot/session";
 
 export const apiRouter = Router();
 
@@ -225,21 +226,29 @@ apiRouter.get("/conversations", async (_req: Request, res: Response) => {
     },
   });
 
-  // Traer leads asociados en paralelo para obtener customerName
+  // Traer leads asociados en paralelo para obtener customerName y estado
   const waIds = convs.map((c) => c.waId);
   const leads = await prisma.lead.findMany({
     where: { waId: { in: waIds } },
-    select: { waId: true, name: true, displayName: true },
+    select: { waId: true, name: true, displayName: true, qualified: true, disqualified: true, meetings: { select: { status: true }, take: 1, orderBy: { createdAt: "desc" } } },
   });
-  const leadMap = new Map(leads.map((l) => [l.waId, l.name ?? l.displayName ?? null]));
+  const leadMap = new Map(leads.map((l) => [l.waId, l]));
 
-  const data = convs.map((c) => ({
-    waId: c.waId,
-    customerName: leadMap.get(c.waId) ?? null,
-    lastActivity: new Date(c.updatedAt).getTime(),
-    lastMessage: c.messages[0]?.content ?? "",
-    messageCount: c._count.messages,
-  }));
+  const data = convs.map((c) => {
+    const lead = leadMap.get(c.waId);
+
+    // Estado: sesión en memoria > derivado de DB
+    let state: string = getSessionState(c.waId) ?? deriveStateFromLead(lead);
+
+    return {
+      waId: c.waId,
+      customerName: lead?.name ?? lead?.displayName ?? null,
+      lastActivity: new Date(c.updatedAt).getTime(),
+      lastMessage: c.messages[0]?.content ?? "",
+      messageCount: c._count.messages,
+      state,
+    };
+  });
 
   res.json({ ok: true, data });
 });
@@ -323,6 +332,16 @@ apiRouter.patch("/conversations/:waId/automation", (req: Request, res: Response)
 // ═══════════════════════════════════════════════════════════════════════════════
 // SSE — eventos en tiempo real
 // ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Helper: deriva estado de conversación desde campos del Lead en DB ────────
+function deriveStateFromLead(lead: { qualified?: boolean | null; disqualified?: boolean; meetings?: { status: string }[] } | undefined): string {
+  if (!lead) return "GREETING";
+  if (lead.meetings && lead.meetings.length > 0) return "CONFIRMED";
+  if (lead.disqualified) return "DISQUALIFIED";
+  if (lead.qualified === true) return "SCHEDULING";
+  if (lead.qualified === false) return "DISQUALIFIED";
+  return "QUALIFYING";
+}
 
 apiRouter.get("/stream/events", (req: Request, res: Response) => {
   res.setHeader("Content-Type", "text/event-stream");

@@ -80,6 +80,10 @@ export function updateSession(waId: string, updates: Partial<Session>): void {
   Object.assign(session, updates, { updatedAt: new Date() });
 }
 
+export function getSessionState(waId: string): ConversationState | null {
+  return sessions.get(waId)?.state ?? null;
+}
+
 export function clearRemarketingTimer(waId: string): void {
   const session = sessions.get(waId);
   if (session?.remarketingTimer) {
