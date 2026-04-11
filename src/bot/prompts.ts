@@ -3,9 +3,9 @@ import { CalendarSlot } from "../calendar/client";
 import { LeadInfo } from "./session";
 
 function formatBudget(amount: number): string {
-  return new Intl.NumberFormat("es-CO", {
+  return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency: "COP",
+    currency: "USD",
     maximumFractionDigits: 0,
   }).format(amount);
 }
@@ -75,8 +75,8 @@ function nowInColombia(): string {
 }
 
 export function buildSystemPrompt(lead: LeadInfo, availableSlots?: CalendarSlot[]): string {
-  const minBudget = formatBudget(QUALIFICATION.MIN_MONTHLY_BUDGET_COP);
-  const borderlineBudget = formatBudget(QUALIFICATION.BORDERLINE_BUDGET_COP);
+  const minBudget = formatBudget(QUALIFICATION.MIN_MONTHLY_BUDGET_USD);
+  const borderlineBudget = formatBudget(QUALIFICATION.BORDERLINE_BUDGET_USD);
   const hasProofImages = PROOF_IMAGES.length > 0;
   const g = PERFORMANCE_IA.guarantee;
 
