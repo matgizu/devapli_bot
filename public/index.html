@@ -291,7 +291,7 @@
     try {
       const r = await fetch("/api/conversations");
       const json = await r.json();
-      conversations = json.data || [];
+      conversations = (json.data || []).sort((a, b) => b.lastActivity - a.lastActivity);
       renderList(document.getElementById("search").value);
     } catch(e) { console.error(e); }
   }
