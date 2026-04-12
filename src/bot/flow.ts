@@ -6,12 +6,12 @@ import {
   LeadInfo,
 } from "./session";
 import { calendarClient, CalendarSlot } from "../calendar/client";
-import { upsertLead, createMeeting } from "../leads/manager";
-import { persistMessage } from "../db/conversations";
+import { upsertLead, createMeeting, getLeadByWaId } from "../leads/manager";
+import { persistMessage, getConversationHistory } from "../db/conversations";
 import { botEvents } from "../events/emitter";
 import { restartRemarketingTimer, cancelFollowUp } from "./remarketing";
 import { sendProofImages } from "../whatsapp/sender";
-import { PROOF_IMAGES, HUMAN_BEHAVIOR } from "../config";
+import { PROOF_IMAGES, HUMAN_BEHAVIOR, CLAUDE } from "../config";
 import { notifyMeetingBooked, notifyHumanTakeover } from "../notifications/notify";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -25,6 +25,11 @@ export async function processMessage(
   userText: string
 ): Promise<string[]> {
   const session = getSession(waId, displayName);
+
+  // Restaurar desde DB si la sesión acaba de crearse (reinicio del servidor o TTL expirado)
+  if (session.history.length === 0) {
+    await restoreSessionFromDB(session);
+  }
 
   // Si el bot está pausado por intervención humana, registrar el mensaje pero no responder
   if (session.paused) {
@@ -220,6 +225,57 @@ async function bookMeeting(
     attendeeEmail: session.lead.email,
     attendeePhone: waId,
   });
+}
+
+async function restoreSessionFromDB(session: Session): Promise<void> {
+  try {
+    // 1. Restaurar datos del lead
+    const lead = await getLeadByWaId(session.waId);
+    if (lead) {
+      session.lead = {
+        phone: session.waId,
+        name: lead.name ?? undefined,
+        email: lead.email ?? undefined,
+        businessName: lead.businessName ?? undefined,
+        businessType: lead.businessType ?? undefined,
+        monthlyBudget: lead.monthlyBudget ?? undefined,
+        budgetAmount: lead.budgetAmount ?? undefined,
+        businessAge: lead.businessAge ?? undefined,
+        businessAgeMonths: lead.businessAgeMonths ?? undefined,
+        qualified: lead.qualified ?? undefined,
+        disqualified: lead.disqualified ?? false,
+      };
+
+      // Restaurar estado basado en datos del lead
+      const activeMeeting = lead.meetings?.find((m) =>
+        ["SCHEDULED", "CONFIRMED"].includes(m.status)
+      );
+      if (activeMeeting) {
+        session.meetingBooked = true;
+        session.lead.selectedSlot = activeMeeting.scheduledAt.toISOString();
+        session.state = "CONFIRMED";
+      } else if (lead.disqualified) {
+        session.state = "DISQUALIFIED";
+      } else if (lead.qualified) {
+        session.state = "SCHEDULING";
+      } else if (lead.name) {
+        session.state = "QUALIFYING";
+      }
+    }
+
+    // 2. Restaurar historial de conversación
+    const messages = await getConversationHistory(session.waId, CLAUDE.maxHistoryTurns * 2);
+    if (messages.length > 0) {
+      session.history = messages.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      }));
+      console.log(`[flow] Sesión restaurada desde DB para ${session.waId} — ${messages.length} mensajes, estado: ${session.state}`);
+    }
+  } catch (error) {
+    console.error(`[flow] Error restaurando sesión desde DB para ${session.waId}:`, error);
+    // Continuar con sesión vacía — no interrumpir el flujo
+  }
 }
 
 function applyLeadUpdate(session: Session, update: Record<string, unknown>): void {

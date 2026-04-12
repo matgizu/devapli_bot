@@ -178,6 +178,8 @@ function scheduleNext(waId: string, delayMs: number): void {
 // ─── API pública ──────────────────────────────────────────────────────────────
 
 export function restartRemarketingTimer(waId: string): void {
+  if (!REMARKETING.enabled) return;
+
   const session = getExistingSession(waId);
   if (
     !session ||
@@ -202,6 +204,10 @@ export function cancelFollowUp(waId: string): void {
  * Evita que reinicios de Railway pierdan el estado de todos los contactos.
  */
 export async function initRemarketingFromDB(): Promise<void> {
+  if (!REMARKETING.enabled) {
+    console.log("[remarketing] Deshabilitado — no se restauran timers");
+    return;
+  }
   try {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 

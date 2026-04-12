@@ -78,6 +78,8 @@ export const HUMAN_BEHAVIOR = {
 
 // ─── Remarketing ─────────────────────────────────────────────────────────────
 export const REMARKETING = {
+  // Poner en false para deshabilitar el remarketing completamente
+  enabled: false,
   // Tiempo de silencio antes del primer follow-up
   firstDelayMs: 60 * 60 * 1000,   // 1 hora
   // Intervalo entre follow-ups subsiguientes
