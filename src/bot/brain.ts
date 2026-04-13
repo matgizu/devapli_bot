@@ -36,7 +36,8 @@ export async function askClaude(
   // Construir system prompt con contexto actual y slots si están disponibles
   const systemPrompt = buildSystemPrompt(
     session.lead,
-    injectedSlots ?? session.availableSlots
+    injectedSlots ?? session.availableSlots,
+    session.meetingBooked
   );
 
   // Preparar historial (últimos N turnos)
@@ -51,25 +52,43 @@ export async function askClaude(
     { role: "user" as const, content: userMessage },
   ];
 
-  try {
-    const response = await client.messages.create({
-      model: CLAUDE.model,
-      max_tokens: CLAUDE.maxTokens,
-      temperature: 0.3,
-      system: systemPrompt,
-      messages,
-    });
+  const maxRetries = 3;
+  const retryableTypes = ["api_error", "overloaded_error"];
 
-    const rawText = response.content
-      .filter((c) => c.type === "text")
-      .map((c) => (c as Anthropic.TextBlock).text)
-      .join("");
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await client.messages.create({
+        model: CLAUDE.model,
+        max_tokens: CLAUDE.maxTokens,
+        temperature: 0.3,
+        system: systemPrompt,
+        messages,
+      });
 
-    return parseClaudeResponse(rawText);
-  } catch (error) {
-    console.error("[brain] Error llamando a Claude:", error);
-    throw error;
+      const rawText = response.content
+        .filter((c) => c.type === "text")
+        .map((c) => (c as Anthropic.TextBlock).text)
+        .join("");
+
+      return parseClaudeResponse(rawText);
+    } catch (error: any) {
+      const errorType = error?.error?.type ?? error?.type ?? "";
+      const isRetryable = retryableTypes.includes(errorType) || error?.status >= 500;
+
+      if (isRetryable && attempt < maxRetries) {
+        const delayMs = attempt * 2000; // 2s, 4s
+        console.warn(`[brain] Error transitorio (${errorType}), reintentando en ${delayMs}ms… (intento ${attempt}/${maxRetries})`);
+        await new Promise((r) => setTimeout(r, delayMs));
+        continue;
+      }
+
+      console.error(`[brain] Error llamando a Claude (intento ${attempt}/${maxRetries}):`, error);
+      throw error;
+    }
   }
+
+  // TypeScript: nunca llega aquí, pero satisface el tipo
+  throw new Error("[brain] Max reintentos agotados");
 }
 
 function parseClaudeResponse(raw: string): ClaudeResponse {

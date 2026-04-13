@@ -1,5 +1,22 @@
 import { sendText } from "../whatsapp/sender";
 
+async function sendWithRetry(to: string, msg: string, context: string, maxRetries = 3): Promise<void> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await sendText(to, msg);
+      return;
+    } catch (error) {
+      if (attempt < maxRetries) {
+        const delayMs = attempt * 3000; // 3s, 6s
+        console.warn(`[notify] Error en ${context} (intento ${attempt}/${maxRetries}), reintentando en ${delayMs}ms…`);
+        await new Promise((r) => setTimeout(r, delayMs));
+      } else {
+        console.error(`[notify] Error enviando ${context} tras ${maxRetries} intentos:`, error);
+      }
+    }
+  }
+}
+
 export async function notifyMeetingBooked(params: {
   name: string;
   waId: string;
@@ -30,11 +47,7 @@ export async function notifyMeetingBooked(params: {
     `💰 Presupuesto pauta: ${params.monthlyBudget || "—"}\n` +
     `📆 ${fecha} (hora Colombia)`;
 
-  try {
-    await sendText(notifyNumber, msg);
-  } catch (error) {
-    console.error("[notify] Error enviando notificación WhatsApp:", error);
-  }
+  await sendWithRetry(notifyNumber, msg, "notifyMeetingBooked");
 }
 
 export async function notifyHumanTakeover(params: {
@@ -53,9 +66,5 @@ export async function notifyHumanTakeover(params: {
     `🏢 ${params.businessName || "—"}\n\n` +
     `El bot está pausado. Entrá a la conversación manualmente.`;
 
-  try {
-    await sendText(notifyNumber, msg);
-  } catch (error) {
-    console.error("[notify] Error enviando notificación de takeover:", error);
-  }
+  await sendWithRetry(notifyNumber, msg, "notifyHumanTakeover");
 }

@@ -347,6 +347,43 @@ apiRouter.patch("/conversations/:waId/automation", (req: Request, res: Response)
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// NOTIFICACIONES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+apiRouter.post("/notify/meeting", async (req: Request, res: Response) => {
+  const { name, waId, email, businessName, scheduledAt, monthlyBudget } = req.body as {
+    name?: string;
+    waId?: string;
+    email?: string;
+    businessName?: string;
+    scheduledAt?: string;
+    monthlyBudget?: string;
+  };
+
+  if (!scheduledAt) {
+    res.status(400).json({ ok: false, error: "El campo 'scheduledAt' es requerido (ISO 8601)" });
+    return;
+  }
+
+  const { notifyMeetingBooked } = await import("../notifications/notify");
+  try {
+    await notifyMeetingBooked({
+      name: name ?? "—",
+      waId: waId ?? "—",
+      email: email ?? "",
+      businessName: businessName ?? "",
+      scheduledAt,
+      monthlyBudget,
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Error al enviar notificación";
+    console.error("[api] Error en /notify/meeting:", err);
+    res.status(502).json({ ok: false, error: message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // SSE — eventos en tiempo real
 // ═══════════════════════════════════════════════════════════════════════════════
 

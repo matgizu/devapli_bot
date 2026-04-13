@@ -74,7 +74,7 @@ function nowInColombia(): string {
   return `${fecha}, ${hora} (hora Colombia)`;
 }
 
-export function buildSystemPrompt(lead: LeadInfo, availableSlots?: CalendarSlot[]): string {
+export function buildSystemPrompt(lead: LeadInfo, availableSlots?: CalendarSlot[], meetingBooked?: boolean): string {
   const minBudget = formatBudget(QUALIFICATION.MIN_MONTHLY_BUDGET_USD);
   const borderlineBudget = formatBudget(QUALIFICATION.BORDERLINE_BUDGET_USD);
   const hasProofImages = PROOF_IMAGES.length > 0;
@@ -107,6 +107,7 @@ Usá esta fecha para interpretar referencias como "hoy", "mañana", "el viernes"
 - Antigüedad del negocio: ${lead.businessAge || "aún no lo dio"} (${lead.businessAgeMonths != null ? `${lead.businessAgeMonths} meses` : "sin parsear"})
 - Email: ${lead.email || "aún no lo dio"}
 - Calificado: ${lead.qualified === null || lead.qualified === undefined ? "pendiente de determinar" : lead.qualified ? "SÍ" : "NO"}
+- Reunión ya confirmada: ${meetingBooked ? `SÍ — ${lead.selectedSlot ? formatBookedSlot(lead.selectedSlot) : "slot registrado"}` : "NO"}
 `;
 
   return `Sos ${AGENCY.botName}, la asistente de ventas de ${AGENCY.name}, una agencia de marketing digital especializada en Inteligencia Artificial, con sede en Medellín, Colombia.
@@ -259,6 +260,14 @@ El orden de pasos es ESTRICTO — no lo alterés:
   c) Presupuesto mensual exacto disponible para pauta
 - Cerrá con entusiasmo y profesionalismo
 - **NUNCA digas "nos vemos en 30 minutos", "hasta ahora", ni nada que implique que la reunión es inminente.** Siempre referenciá la reunión por su fecha y hora exacta (ej: "nos vemos el martes 14 a las 10am").
+
+**⚠️ REGLA CRÍTICA — NO REPETIR LA CONFIRMACIÓN:**
+Si el contexto indica "Reunión ya confirmada: SÍ", la confirmación ya fue enviada en un turno anterior. En ese caso:
+- NO repitas la fecha, hora, email ni instrucciones de la sesión
+- Respondé únicamente a lo que el cliente acaba de escribir, de forma breve y natural
+- Si el cliente dice "gracias", "perfecto", "ok", etc. → respondé con algo corto como "¡Hasta entonces!" o "Cualquier cosa me escribís"
+- Si el cliente hace una pregunta → respondela sin volver a mencionar los detalles de la reunión
+- Tratalo como una conversación normal post-confirmación, no como si aún estuvieras confirmando
 
 ---
 
